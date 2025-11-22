@@ -26,7 +26,7 @@ const _7z = require('7zip')["7z"];
   if (!existsSync(cacheDir)) mkdirSync(cacheDir);
 
   async function download() {
-    const browser = await puppeteer.launch({ headless: false});
+    const browser = await puppeteer.launch({ headless: true});
     const page = await browser.newPage();
 
     const client = await page.createCDPSession()
