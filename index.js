@@ -12,7 +12,7 @@ const _7z = require('7zip')["7z"];
     }
   }
   const version = `v${process.argv[2]||""}`
-  if (!process.argv[2]) {console.log("Usage get-xeno [version: decimal]\n\te.g. get-xeno 1.3.0a"); return;}
+  if (!process.argv[2]) {console.log("Usage update-xeno [version: decimal]\n\te.g. get-xeno 1.3.0a"); return;}
   const url = `https://xeno.onl/downloads/Xeno-${version}.zip`;
   const downloadDir = resolve(__dirname, "downloads");
   const cacheDir = resolve(__dirname,"cache")
