@@ -1,0 +1,13 @@
+{
+  "name": "xeno-updater",
+  "type": "commonjs",
+  "version": "1.0.0",
+  "bin": "index.js",
+  "main": "index.js",
+  "author": "somestuds",
+  "description": "Auto updates and reinstalls Xeno Executor",
+  "dependencies": {
+    "7zip": "^0.0.6",
+    "puppeteer": "^24.31.0"
+  }
+}
