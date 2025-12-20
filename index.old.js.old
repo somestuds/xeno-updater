@@ -1,165 +1,19 @@
 const puppeteer = require('puppeteer');
-
-
-async function getXenoDownload() {
-    return new Promise(async (res, rej) => {
-        async function Page(browser, url) {
-            let page = await browser.newPage();
-            await page.goto(url, {waitUntil: 'domcontentloaded'});
-            return page;
-        }
-
-        async function waitForSelectorOrNull(page, selector, timeout = 5000) {
-            const start = Date.now();
-            while (Date.now() - start < timeout) {
-                const el = await page.$(selector);
-                if (el) return el;
-                await new Promise(r => setTimeout(r,100))
-            }
-            return null;
-        }
-        async function waitForParentOfSelectorWithText(page, selector, text, timeout = 5000) {
-            const start = Date.now();
-
-            while (Date.now() - start < timeout) {
-                const elements = await page.$$(selector);
-                for (const el of elements) {
-                    const elText = await el.evaluate(e => e.textContent.trim());
-                    if (elText === text) { // exact match; use includes() for partial match
-                        const parentHandle = await el.evaluateHandle(e => e.parentElement);
-                        return parentHandle;
-                    }
-                }
-                await new Promise(r => setTimeout(r, 100)); // poll every 100ms
-            }
-
-            return null; // not found
-        }
-
-        let browser = await puppeteer.launch({ headless: true });
-        let page = await Page(browser, 'https://xeno.onl/method')
-
-        const adLinkAnchor = await waitForSelectorOrNull(page, 'a[href*="loot-link.com"]', 1200)
-        const adLink = await page.evaluate(el => el.href, adLinkAnchor);
-
-        await page.close();
-
-        if (!adLinkAnchor || !adLink) {
-            console.log("Could not find Xeno ad-link.");
-            rej("Could not find Xeno ad-link.")
-        }
-        console.log("Obtained Xeno Ad-Link:", adLink)
-        page = await Page(browser, `https://link-bypass.com/bypass?url-input=${encodeURIComponent(adLink)}`);
-
-        // await page.evaluateOnNewDocument(() => {
-        //     window.open = () => null;
-        // });
-
-        browser.on("targetcreated", async target => {
-            //console.log(target, target.type())
-            if (target.type() === "page") {
-                const newPage = await target.page();
-                const url = newPage.url();
-                console.log("opened: ", url)
-                if (!(url.includes("link-bypass") || url.includes("xeno.onl"))) {
-                    newPage.close();
-                }
-            }
-        });
-        // page.setRequestInterception(true)
-        // page.on('request', (request) => {
-        //     const url = request.url();
-
-        //     // Block Google Ads domains or requests containing /ads/
-        //      if (!url.includes('google') && !url.includes("link-bypass")) {
-        //          request.abort()
-        //      } else {
-        //         console.log(url);
-        //      }
-        // });
-
-        const urlSubmitButton = await page.$('#access-btn');
-        await new Promise(r => setTimeout(r,1200))
-        console.log("Bypassing Ad-Link...")
-        await urlSubmitButton.click();
-
-        let targetXenoPageAnchor = await waitForSelectorOrNull(page, "a.header-order-button-slid.input-glow.search-btn", 8000)
-        if (!targetXenoPageAnchor) {
-            console.log("Could not bypass Ad-Link");
-            await browser.close();
-            return;
-        }
-
-        const xenoDownloadPage = await page.evaluate(el => el.href, targetXenoPageAnchor)
-        console.log("Xeno Download Page:", xenoDownloadPage)
-        
-        await page.close()
-        //await browser.close();
-
-        browser.removeAllListeners("targetcreated")
-
-        //browser = await puppeteer.launch({headless: false})
-        page = await Page(browser, xenoDownloadPage)
-        const legacyOldUiButton = await waitForParentOfSelectorWithText(page, 'div', 'Legacy', 600)
-        await legacyOldUiButton.click();
-
-        const submitSpan = await waitForParentOfSelectorWithText(page, 'span', 'Download')
-        if (!submitSpan) {
-            console.log("Failed to obtain Xeno Submit button");
-            await browser.close();
-            rej("Failed to obtain Xeno Submit button")
-        }
-
-        const client = await page.target().createCDPSession();
-        await client.send("Browser.setDownloadBehavior", {
-            behavior: "allow",
-            downloadPath: "./downloads",
-            eventsEnabled: true
-        });
-        client.on("Browser.downloadWillBegin", async (event) => {
-            let name = event.suggestedFilename
-            let fileUrl = event.url
-
-            if (name.toLowerCase().includes("xeno") && name.toLowerCase().endsWith(".zip")) {
-                await browser.close();
-                res(fileUrl);
-            }
-        });
-
-        const submitButton = await submitSpan.evaluateHandle(el => el.parentElement)
-        await new Promise(r => setTimeout(r,500))
-        await submitButton.click();
-
-        await new Promise(r => {setTimeout})
-        console.log("Timed out")
-    })
-}
-
-
-
-const { existsSync, mkdirSync, readdirSync, copyFileSync, rmdirSync, rmSync, statSync, writeFileSync, readFileSync } = require('fs');
+const { existsSync, mkdirSync, readdirSync, copyFileSync, rmdirSync, rmSync, statSync, writeFileSync } = require('fs');
 const { readFile, cp, rm } = require('fs/promises');
-
 const readline = require('readline');
-
 const { exec, spawn } = require('child_process');
 const { resolve, join, dirname } = require('path');
 const _7z = require('7zip')["7z"];
-
 (async () => {
   function clearDir(dir) {
     for (const file of readdirSync(dir)) {
       rmSync(join(dir, file), { recursive: true, force: true });
     }
   }
-  const url = await new Promise(res => {
-    getXenoDownload().then(res).catch((reason) => {
-      console.log("Could not obtain Xeno Download Url;\n", reason)
-      return;
-    })
-  })
-  console.log("Obtained Xeno download url:", url)
-
+  const version = `v${process.argv[2]||""}`
+  if (!process.argv[2]) {console.log("Usage update-xeno [version: decimal]\n\te.g. get-xeno 1.3.0a"); return;}
+  const url = `https://xeno.onl/downloads/Xeno-${version}.zip`;
   const downloadDir = resolve(__dirname, "downloads");
   const cacheDir = resolve(__dirname,"cache")
   const savedFile = join(__dirname,"cache", "__xeno.zip");
@@ -201,7 +55,7 @@ const _7z = require('7zip')["7z"];
     });
 
     if (!startFile) {
-      console.log("No download started within 2.5s");
+      console.log("No download started within 2.5s — incorrect version?");
       await browser.close();
       return;
     }
@@ -314,7 +168,6 @@ const _7z = require('7zip')["7z"];
 
         child.on("close", code => {
           if (code !== 0) return reject(new Error("7zip failed with code " + code));
-          console.log("Extracted Xeno Binary");
           resolve();
         });
       });
@@ -326,9 +179,6 @@ const _7z = require('7zip')["7z"];
       const parentDir = dirname(exePath);
       if (!parentDir) return;
 
-      const version = url.split("Xeno-")[1].split("-")[0]
-      console.log("New Version:", version)
-
       writeFileSync(join(parentDir, "version.dat"), version, "utf-8");
       const versionPath = "C:\\Xeno Executor\\version.dat"
 
@@ -336,19 +186,17 @@ const _7z = require('7zip')["7z"];
         .then((_ver) => {
           const _v1 = _ver.toLowerCase()
           const _v2 = version.toLowerCase()
-          final(!(_v1 == _v2), _v1);
+          final(!(_v1 == _v2));
         })
         .catch((err) => {
           console.log("No version found in Xeno Executor file, assuming update");
-          final(true, nil);
+          final(true);
         });
 
-      async function final(needsUpdate, oldVersion) {
+      async function final(needsUpdate) {
         if (!needsUpdate) {
           console.log("Xeno up-to-date: " + version);
           return;
-        } else {
-          console.log("Xeno updating: " + oldVersion ?? "v0.0.0" + " -> " + version)
         }
 
         let [processRunning, processName] = await isProcessRunning("Xeno.exe");
@@ -372,12 +220,12 @@ const _7z = require('7zip')["7z"];
           const oldDir = "C:\\Xeno Executor.old";
           if (existsSync(oldDir)) await rm(oldDir, { recursive: true, force: true });
 
-          console.log("Xeno installed to:", xenoDir);
+          console.log("Xeno DIR:", xenoDir);
           await copyAndReplaceDirUnderNewName(xenoDir, oldDir);
         }
 
         await copyAndReplaceDirUnderNewName(parentDir, xenoDir);
-        console.log("Xeno updated successfully!");
+        console.log("Xeno updated!");
         return;
       }
     }
