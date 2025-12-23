@@ -145,11 +145,12 @@ async function getXenoDownload() {
   })
 }
 
-if (!existsSync(".config")) {
-  writeFileSync(".config","","utf-8")
+const configPath = join(__dirname, ".config");
+if (!existsSync(configPath)) {
+  writeFileSync(configPath,"","utf-8")
 }
 
-const config = parse(readFileSync(".config", "utf-8"))
+const config = parse(readFileSync(configPath, "utf-8"))
 
 
 const defaultInstallDirectory = "C:\\Xeno Executor"
@@ -175,7 +176,7 @@ if (options.output && !options.getOutputDir) {
     console.log("From now on, this updater will use:", path);
     installDirectory = path;
     config.installDir = path;
-    writeFileSync(".config", stringify(config))
+    writeFileSync(configPath, stringify(config))
   }
 }
 const installOldDir = installDirectory + ".old";
