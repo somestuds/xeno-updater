@@ -8,6 +8,9 @@
   "description": "Auto updates and reinstalls Xeno Executor",
   "dependencies": {
     "7zip": "^0.0.6",
+    "commander": "^14.0.2",
+    "ini": "^6.0.0",
+    "native-file-dialog": "^0.2.0",
     "puppeteer": "^24.31.0"
   }
 }
