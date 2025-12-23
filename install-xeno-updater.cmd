@@ -9,7 +9,7 @@ for /d %%D in ("%parent%\*") do rmdir /S /Q "%%D"
 xcopy "_install\*" "%parent%" /E /I /Y
 rmdir /S /Q "_install"
 pushd %parent%
-npm install
+call npm install
 popd
 
 del /Q "update-xeno.cmd"
