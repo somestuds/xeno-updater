@@ -1,7 +1,7 @@
-const { existsSync, mkdirSync, readdirSync, copyFileSync, rmdirSync, rmSync, statSync, writeFileSync, readFileSync } = require('fs');
-const { readFile, cp, rm } = require('fs/promises');
+const { existsSync, mkdirSync, readdirSync, copyFileSync, rmdirSync, rmSync, statSync, writeFileSync, readFileSync, cpSync } = require('fs');
+const { readFile } = require("fs/promises")
 const { resolve, join, dirname } = require('path');
-const { exec, spawn } = require('child_process');
+const { exec, spawn, execSync } = require('child_process');
 const readline = require('readline');
 
 const _7z = require('7zip')["7z"];
@@ -11,7 +11,7 @@ const nfd = require("native-file-dialog")
 const puppeteer = require('puppeteer');
 
 
-async function getXenoDownload() {
+async function getXenoDownload(prebypassedLink) {
   return new Promise(async (res, rej) => {
     async function Page(browser, url) {
       let page = await browser.newPage();
@@ -46,67 +46,73 @@ async function getXenoDownload() {
       return null; // not found
     }
 
+  
+
     let browser = await puppeteer.launch({ headless: true });
-    let page = await Page(browser, 'https://xeno.onl/method')
+    let page
 
-    const adLinkAnchor = await waitForSelectorOrNull(page, 'a[href*="loot-link.com"]', 1200)
-    const adLink = await page.evaluate(el => el.href, adLinkAnchor);
+    let xenoDownloadPage = prebypassedLink
+    if (!xenoDownloadPage) {  
+      page = await Page(browser, 'https://xeno.onl/method')
 
-    await page.close();
+      const adLinkAnchor = await waitForSelectorOrNull(page, 'a[href*="loot-link.com"]', 1200)
+      const adLink = await page.evaluate(el => el.href, adLinkAnchor);
 
-    if (!adLinkAnchor || !adLink) {
-      console.log("Could not find Xeno ad-link.");
-      rej("Could not find Xeno ad-link.")
-    }
-    console.log("Obtained Xeno Ad-Link:", adLink)
-    page = await Page(browser, `https://link-bypass.com/bypass?url-input=${encodeURIComponent(adLink)}`);
+      await page.close();
 
-    // await page.evaluateOnNewDocument(() => {
-    //     window.open = () => null;
-    // });
-
-    browser.on("targetcreated", async target => {
-      //console.log(target, target.type())
-      if (target.type() === "page") {
-        const newPage = await target.page();
-        const url = newPage.url();
-        console.log("opened: ", url)
-        if (!(url.includes("link-bypass") || url.includes("xeno.onl"))) {
-          newPage.close();
-        }
+      if (!adLinkAnchor || !adLink) {
+        console.log("Could not find Xeno ad-link.");
+        rej("Could not find Xeno ad-link.")
       }
-    });
-    // page.setRequestInterception(true)
-    // page.on('request', (request) => {
-    //     const url = request.url();
+      console.log("Obtained Xeno Ad-Link:", adLink)
+      page = await Page(browser, `https://link-bypass.com/bypass?url-input=${encodeURIComponent(adLink)}`);
 
-    //     // Block Google Ads domains or requests containing /ads/
-    //      if (!url.includes('google') && !url.includes("link-bypass")) {
-    //          request.abort()
-    //      } else {
-    //         console.log(url);
-    //      }
-    // });
+      // await page.evaluateOnNewDocument(() => {
+      //     window.open = () => null;
+      // });
 
-    const urlSubmitButton = await page.$('#access-btn');
-    await new Promise(r => setTimeout(r, 1200))
-    console.log("Bypassing Ad-Link...")
-    await urlSubmitButton.click();
+      browser.on("targetcreated", async target => {
+        //console.log(target, target.type())
+        if (target.type() === "page") {
+          const newPage = await target.page();
+          const url = newPage.url();
+          console.log("opened: ", url)
+          if (!(url.includes("link-bypass") || url.includes("xeno.onl"))) {
+            newPage.close();
+          }
+        }
+      });
+      // page.setRequestInterception(true)
+      // page.on('request', (request) => {
+      //     const url = request.url();
 
-    let targetXenoPageAnchor = await waitForSelectorOrNull(page, "a.header-order-button-slid.input-glow.search-btn", 8000)
-    if (!targetXenoPageAnchor) {
-      console.log("Could not bypass Ad-Link");
-      await browser.close();
-      return;
+      //     // Block Google Ads domains or requests containing /ads/
+      //      if (!url.includes('google') && !url.includes("link-bypass")) {
+      //          request.abort()
+      //      } else {
+      //         console.log(url);
+      //      }
+      // });
+
+      const urlSubmitButton = await page.$('#access-btn');
+      await new Promise(r => setTimeout(r, 1200))
+      console.log("Bypassing Ad-Link...")
+      await urlSubmitButton.click();
+
+      let targetXenoPageAnchor = await waitForSelectorOrNull(page, "a.header-order-button-slid.input-glow.search-btn", 8000)
+      if (!targetXenoPageAnchor) {
+        console.log("Could not bypass Ad-Link");
+        await browser.close();
+        return;
+      }
+
+      xenoDownloadPage = await page.evaluate(el => el.href, targetXenoPageAnchor)
+      console.log("Xeno Download Page:", xenoDownloadPage)
+
+      await page.close()
+      //await browser.close();
+      browser.removeAllListeners("targetcreated")
     }
-
-    const xenoDownloadPage = await page.evaluate(el => el.href, targetXenoPageAnchor)
-    console.log("Xeno Download Page:", xenoDownloadPage)
-
-    await page.close()
-    //await browser.close();
-
-    browser.removeAllListeners("targetcreated")
 
     //browser = await puppeteer.launch({headless: false})
     page = await Page(browser, xenoDownloadPage)
@@ -149,18 +155,27 @@ const configPath = join(__dirname, ".config");
 if (!existsSync(configPath)) {
   writeFileSync(configPath,"","utf-8")
 }
-
-const config = parse(readFileSync(configPath, "utf-8"))
+function setConfig(key, value) {
+  const config = parse(readFileSync(configPath, "utf-8"))
+  config[key] = value
+  writeFileSync(configPath, stringify(config), "utf-8")
+}
+function getConfig(key, defaultValue) {
+  const config = parse(readFileSync(configPath, "utf-8"))
+  return config[key] ?? defaultValue
+}
 
 
 const defaultInstallDirectory = "C:\\Xeno Executor"
-let installDirectory = config.installDir ?? defaultInstallDirectory
+let installDirectory = getConfig("installDir") ?? defaultInstallDirectory
 
 const optManager = new Command("update-xeno")
   .helpOption("-h, --help", "Shows the help print")
   .option("-o, --output", "Sets output directory, (saves in config for future)")
   .option("-d, --get-output-dir", "Reads you your last chosen output directory")
-
+  .option("-l, --bypass-link <link>", "Use a pre-bypassed link instead, (e.g. https://www.xeno.onl/40a25bc...)")
+  .option("--enable-default-shortcut", "Sets Start Menu Shortcut creation as default.")
+  .option("--disable-default-shortcut", "Makes Start Menu Shortcut creation not default.")
 optManager.parse(process.argv)
 
 const options = optManager.opts()
@@ -175,11 +190,44 @@ if (options.output && !options.getOutputDir) {
   } else {
     console.log("From now on, this updater will use:", path);
     installDirectory = path;
-    config.installDir = path;
-    writeFileSync(configPath, stringify(config))
+    setConfig("installDir", path);
   }
 }
 const installOldDir = installDirectory + ".old";
+let prebypassLink = options.bypassLink
+
+if (options.enableDefaultShortcut && !options.disableDefaultShortcut) setConfig("makeShortcutDefault", true)
+if (!options.enableDefaultShortcut && options.disableDefaultShortcut) setConfig("makeShortcutDefault", false)
+
+function refreshXenoLink() {
+  const smenu = join(
+    process.env.APPDATA,
+    "Microsoft",
+    "Windows",
+    "Start Menu",
+    "Programs"
+  );
+  const exec = join(installDirectory, "Xeno.exe");
+  const lnkPath = join(smenu, "Xeno Executor.lnk")
+
+  if (existsSync(lnkPath)) rmSync(lnkPath);
+
+  const psScript = `
+    $ProgressPreference = 'SilentlyContinue'
+    $WshShell = New-Object -ComObject WScript.Shell
+    $Shortcut = $WshShell.CreateShortcut("${join(smenu, "Xeno Executor.lnk")}")
+    $Shortcut.TargetPath = "${exec}"
+    $Shortcut.WorkingDirectory = "${dirname(exec)}"
+    $Shortcut.IconLocation = "${exec},0"
+    $Shortcut.Save()
+  `.trim();
+
+  const encoded = Buffer
+    .from(psScript, "utf16le")
+    .toString("base64");
+
+  execSync(`powershell -NoProfile -EncodedCommand ${encoded}`);
+}
 
 (async () => {
   function clearDir(dir) {
@@ -188,7 +236,7 @@ const installOldDir = installDirectory + ".old";
     }
   }
   const url = await new Promise(res => {
-    getXenoDownload().then(res).catch((reason) => {
+    getXenoDownload(prebypassLink).then(res).catch((reason) => {
       console.log("Could not obtain Xeno Download Url;\n", reason)
       return;
     })
@@ -304,8 +352,8 @@ const installOldDir = installDirectory + ".old";
     const parent = dirname(destDir);
     if (!existsSync(parent)) mkdirSync(parent, { recursive: true });
 
-    await cp(srcDir, destDir, { recursive: true });
-    await rm(srcDir, { recursive: true, force: true });
+    cpSync(srcDir, destDir, { recursive: true });
+    rmSync(srcDir, { recursive: true, force: true });
   }
 
   async function askYesNo(question) {
@@ -389,9 +437,7 @@ const installOldDir = installDirectory + ".old";
           [processRunning, processName] = await isProcessRunning(`Xeno-${version}.exe`);
         }
 
-        let saidYesToClose = processRunning
-          ? await askYesNo("Xeno is running, close to update? (y/n): ")
-          : true;
+        let saidYesToClose = !processRunning || await askYesNo("Xeno is running, close to update? (y/n): ")
 
         if (!saidYesToClose) {
           console.log("Please finish cheating, then run again!");
@@ -402,13 +448,23 @@ const installOldDir = installDirectory + ".old";
         await new Promise(res => setTimeout(res, 200));
 
         if (existsSync(installDirectory)) {
-          if (existsSync(installOldDir)) await rm(installOldDir, { recursive: true, force: true });
+          if (existsSync(installOldDir)) rmSync(installOldDir, { recursive: true, force: true });
 
           console.log("Xeno installed to:", installDirectory);
           await copyAndReplaceDirUnderNewName(installDirectory, installOldDir);
         }
 
         await copyAndReplaceDirUnderNewName(parentDir, installDirectory);
+        const makeShortcutDefault = getConfig("makeShortcutDefault", false)
+        const doCreateShortcut = makeShortcutDefault || await askYesNo("Create a Start Menu Shortcut for Xeno Executor? (y/n): ")
+        if (doCreateShortcut) {
+          refreshXenoLink()
+          console.log("Created Shortcut!")
+          if (!makeShortcutDefault) {
+            const makeShortcutCreationDefault = await askYesNo("\n(You can turn it off by using the --disable-default-shortcut parameter)\nWould you like to turn this on by default? (y/n): ")
+            if (makeShortcutCreationDefault) setConfig("makeShortcutDefault", true)
+          }
+        }
         console.log("Xeno updated successfully!");
         return;
       }

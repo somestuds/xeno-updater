@@ -3,4 +3,7 @@ cache
 downloads
 .vscode
 .config
-_release
+src/.config
+src/cache
+src/downloads
+dist
